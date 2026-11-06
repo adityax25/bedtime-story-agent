@@ -1,0 +1,3 @@
+anthropic
+pydantic>=2
+python-dotenv
