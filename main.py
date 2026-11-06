@@ -4,7 +4,7 @@ import anthropic
 from dotenv import load_dotenv
 
 from storyteller.llm import ModelOutputError
-from storyteller.pipeline import generate_story
+from storyteller.pipeline import apply_feedback, generate_story
 
 """
 Before submitting the assignment, describe here in a few sentences what you would have built next if you spent 2 more hours on this project:
@@ -19,11 +19,33 @@ def show_step(message: str) -> None:
     print(f"... {message}", file=sys.stderr)
 
 
+def ask(prompt: str) -> str:
+    try:
+        return input(prompt).strip()
+    except EOFError:
+        return ""
+
+
+def run() -> None:
+    request = ask("What kind of story do you want to hear? ")
+    if not request:
+        request = example_requests
+        show_step(f"No request given, using the example: {request}")
+
+    result = generate_story(request, on_step=show_step)
+    print(f"\n{result.story}\n")
+
+    while feedback := ask("Want any changes? Describe them, or press Enter to finish: "):
+        result = apply_feedback(result, feedback, on_step=show_step)
+        print(f"\n{result.story}\n")
+
+    print("Goodnight!")
+
+
 def main() -> int:
     load_dotenv()
-    user_input = input("What kind of story do you want to hear? ")
     try:
-        result = generate_story(user_input, on_step=show_step)
+        run()
     except anthropic.AuthenticationError:
         print("Authentication failed. Check ANTHROPIC_API_KEY in .env.", file=sys.stderr)
         return 1
@@ -33,8 +55,9 @@ def main() -> int:
     except (anthropic.APIStatusError, ModelOutputError) as err:
         print(f"Story generation failed: {err}", file=sys.stderr)
         return 1
-    print()
-    print(result.story)
+    except KeyboardInterrupt:
+        print("\nGoodnight!", file=sys.stderr)
+        return 130
     return 0
 
 
