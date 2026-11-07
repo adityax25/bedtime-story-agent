@@ -1,71 +1,63 @@
 # Architecture Decision Records
 
-## ADR 1: Multi-agent pipeline (classify, plan, write, judge, revise)
+The five decisions that shape the system most. Smaller choices are described in the README.
 
-**Context.** A single prompt that turns a request directly into a story mixes several concerns: understanding the request, structuring a narrative, writing prose, and checking safety.
+## ADR 1: A pipeline of specialized agents
 
-**Decision.** Split the work into specialized agents: a classifier (category, characters, tone, safety flags), a planner (story arc outline using a category-specific strategy), a storyteller (prose from the outline), a judge, and a reviser. A user feedback loop re-enters the revise and judge stages.
+**Context.** A single prompt that turns a request directly into a story mixes several jobs: understanding the request, deciding what is safe, structuring a narrative, writing prose, and checking quality. The baseline single-call approach failed at least one safety gate on 6 of 8 eval requests.
 
-**Consequences.** Each prompt stays focused and independently testable. The plan-then-write split gives the storyteller a structure to follow and gives the judge a reference for what the story was meant to achieve. Cost is a few extra calls per story, which is negligible on Haiku.
+**Decision.** Split the work into focused agents, each with its own prompt file: a classifier (category, age band, safety verdict), a planner (story arc built from a category-specific strategy, injected only for the matching category), a storyteller, a judge, a reviser, a pairwise judge, and a feedback interpreter for follow-up turns.
 
-## ADR 2: Judge design
+**Consequences.** Each prompt stays short and testable, and the plan gives the judge a structure to check against. A story costs several calls instead of one, which is negligible on Haiku 5.5 and averages under a minute.
 
-**Context.** Naive LLM judges inflate scores, prefer text written by their own model, give unjustified numbers, and can let a safety problem be averaged away by high scores elsewhere.
+## ADR 2: Judge design and calibration
+
+**Context.** LLM judges inflate scores, give unjustified numbers, and can let a safety problem be averaged away. An early version of this judge had the opposite problem: it was so strict that it contradicted itself between rounds and almost never let a story pass.
 
 **Decision.**
-- Rubric with anchored descriptions for every score level.
-- Critique before score: the judge quotes evidence from the story before scoring each dimension.
-- Hard safety gates as pass/fail checks, separate from the averaged quality scores.
-- The judge sees only the rubric, the request, and the story, never the storyteller's prompt.
-- Pairwise acceptance: a revision replaces the previous draft only if the judge prefers it.
-- At most 2 revision rounds.
+- Three pass/fail safety gates, separate from five quality dimensions scored 1 to 5.
+- Every score level is anchored, including 4 ("good enough to read to a child tonight"). The missing 4 anchor was the main cause of stories never passing.
+- A story passes only when every gate passes and the minimum score, not the average, is at least 4.
+- Evidence fields precede verdict fields in the schema, so the model reasons before it decides.
+- Gates judge frightening content, not characters' feelings, under a reasonable-parent standard.
+- The judge sees the request, audience, and story, never the writer's prompts.
 
-**Consequences.** Scores carry evidence and are harder to inflate. Revisions cannot silently regress quality. Safety failures always force a revision.
+**Consequences.** Seven of eight eval stories pass the full rubric, with 0.9 revision rounds on average. Some leniency remains, documented in the README.
 
-## ADR 3: Extras built after the core
+## ADR 3: Safety is guaranteed in code and owned by one judge
 
-**Context.** The core requirement (storyteller plus judge) must ship before the deadline; extras add creativity but carry schedule risk.
+**Context.** Prompt rules reduce unsafe output but do not eliminate it: the storyteller produced body horror despite being told not to. Two further gaps appeared during testing: a story could be shown after the revision limit even while failing a gate, and the pairwise judge, applying its own looser sense of safety, rejected a revision that fixed a gate failure.
 
-**Decision.** Build in order: core pipeline and judge, then a deterministic readability check (Flesch-Kincaid grade level) and an eval harness with before/after scores, then an animated storybook.
+**Decision.**
+- A story that fails any safety gate is never shown. The fallback order is the last draft that passed every gate, then one fresh draft from the plan, then a gentle message with no story. A follow-up change that ends unsafe keeps the previous story.
+- The gate judge is the single source of truth for safety. When a draft fails a gate, a revision is accepted on the gate judge's re-check, never on the pairwise judge's opinion.
+- Follow-up messages pass through their own intake check, the feedback interpreter, so raw listener text never reaches the reviser. Unclear feedback produces a question rather than a forced rewrite.
 
-**Consequences.** A complete, submittable system exists before any extra work starts.
+**Consequences.** Quality may degrade gracefully at the round limit; safety may not. All 8 eval stories passed every gate, against 2 of 8 for the baseline.
 
-## ADR 4: Animated storybook as a self-contained HTML file
+## ADR 4: Revisions must beat the current draft, with facts decided in code
 
-**Context.** A narrated, animated story is memorable, but generating images requires a model other than Haiku, which the assignment forbids, and rendered video needs heavy, platform-specific dependencies.
+**Context.** Iterative revision fixes one problem and often introduces another. LLM comparisons are biased toward whichever version appears first and toward longer text, and a prompt instruction alone did not stop the length bias.
 
-**Decision.** A Scene Director agent returns validated scene JSON; deterministic Python fills an HTML template that animates scenes with CSS and narrates with the browser's speech synthesis.
+**Decision.**
+- When the current draft is safe, a revision is accepted only if a pairwise judge prefers it on net across both orderings, run in parallel, so position bias cancels out.
+- The pairwise judge sees the revision notes (without being told which version is the revision) and exact word counts computed in code.
+- Length is a fact, so code decides it: a revision that crosses the length limit is rejected without asking a model.
 
-**Consequences.** No extra models, keys, or system dependencies. Plays in any modern browser.
+**Consequences.** Revisions cannot silently regress quality or grow the story without bound. The general principle, that code supplies facts and models supply judgment, also drives the word count and reading grade checks.
 
-## ADR 5: Emoji characters on mood-colored scenes
+## ADR 5: Structured outputs and effort levels on Claude Haiku 5.5
 
-**Context.** Scene visuals can come from emoji and colour palettes, or from model-generated SVG.
+**Context.** The assignment fixes the model, and Haiku 5.5 rejects both assistant prefill and non-default sampling parameters such as temperature. The classifier, planner, judges, and interpreter return data that code acts on.
 
-**Decision.** Use emoji characters on mood-colored backgrounds. Model-generated SVG is a possible future extension.
+**Decision.** Machine-read outputs use `client.messages.parse()` with Pydantic schemas, so the API constrains the output and the SDK returns validated objects. Behavior is steered with `output_config.effort` per agent instead of temperature: low for classification and interpretation, medium for planning, writing, revising, and pairwise comparison, high for the judge.
 
-**Consequences.** Visuals render reliably and suit a children's storybook; artistic range is limited.
+**Consequences.** No hand-written JSON parsing or retry-on-malformed-output logic, and the schemas document each agent's contract. Creativity comes from prompts rather than sampling.
 
-## ADR 6: Small package layout
+## Planned extension: animated storybook
 
-**Context.** The original skeleton is a single script. The pipeline adds several agents and prompts.
+**Context.** A narrated, animated story would be memorable at bedtime, but generating images requires a model other than Haiku, which the assignment rules out, and rendering video needs heavy, platform-specific dependencies.
 
-**Decision.** `main.py` stays the CLI entry point. A `storyteller/` package holds the API gateway, schemas, agents, and prompts, with prompts kept in their own files.
+**Design.** A Scene Director agent returns validated scene JSON (narration text, setting, mood colors, characters as emoji, a simple motion cue). Deterministic Python fills a self-contained HTML template that animates each scene with CSS and narrates it with the browser's speech synthesis, highlighting each sentence as it is read. The pipeline's progress events can drive the same page.
 
-**Consequences.** Prompts can be reviewed without reading orchestration code, and every API call goes through one module.
-
-## ADR 7: Structured outputs for machine-read responses
-
-**Context.** The classifier, planner, and judge return data that code acts on. Haiku 5.5 rejects assistant prefill, so JSON cannot be forced by starting the reply with a brace.
-
-**Decision.** Use `client.messages.parse()` with Pydantic models. The API constrains output to the schema and the SDK returns a validated object. The storyteller returns plain prose.
-
-**Consequences.** No hand-written JSON parsing or retry-on-malformed-output logic. Schemas double as documentation of each agent's contract.
-
-## ADR 8: Effort levels instead of temperature
-
-**Context.** Haiku 5.5 returns a 400 for non-default sampling parameters, so temperature cannot differentiate creative and analytical agents.
-
-**Decision.** Steer each agent with `output_config.effort`: classifier `low`, planner `medium`, storyteller `medium`, judge `high`. Creativity is driven by the prompt; consistency by schemas.
-
-**Consequences.** The judge gets the most deliberate reasoning at negligible cost (Haiku 5.5 is $0.10 / $0.50 per million input / output tokens).
+**Why this shape.** No extra models, keys, or system dependencies; the page plays in any modern browser; and the model's output is treated as untrusted input to a renderer, validated by a schema before use.

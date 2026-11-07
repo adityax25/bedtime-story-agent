@@ -4,6 +4,14 @@ Usage: python main.py [--verbose]
 
 Before submitting the assignment, describe here in a few sentences what you would have built next if you spent 2 more hours on this project:
 
+First, self-consistency voting on the safety gates: the eval showed the judge occasionally
+flips its verdict on the same borderline passage (1 of 8 stories), so running the gate check
+three times in parallel and failing on any vote would harden the safety guarantee at no extra
+latency. Second, a larger eval set with a few human ratings, to check that the judge's scores
+track what parents actually prefer rather than what the pipeline was tuned against. Third, the
+animated storybook already designed in docs/decisions.md: a Scene Director agent that turns the
+final story into validated scene JSON, rendered as a self-contained HTML page with CSS animation
+and browser narration, so the story can be watched and heard at bedtime.
 """
 
 import argparse
