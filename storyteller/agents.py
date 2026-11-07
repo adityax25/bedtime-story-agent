@@ -1,8 +1,9 @@
 """One function per agent. Each pairs a system prompt with its inputs and output contract."""
 
+from storyteller.checks import TARGET_WORDS, word_count
 from storyteller.llm import call_model, call_structured
 from storyteller.prompts import load_prompt
-from storyteller.schemas import Judgement, PairwiseVerdict, StoryBrief, StoryPlan
+from storyteller.schemas import FeedbackInterpretation, Judgement, PairwiseVerdict, StoryBrief, StoryPlan
 
 
 def classify(request: str) -> StoryBrief:
@@ -48,20 +49,44 @@ def judge(request: str, brief: StoryBrief, story: str) -> Judgement:
     return call_structured(prompt, Judgement, system=load_prompt("judge"), effort="high")
 
 
+def _numbered(notes: list[str]) -> str:
+    return "\n".join(f"{i}. {note}" for i, note in enumerate(notes, start=1))
+
+
 def revise(brief: StoryBrief, story: str, notes: list[str]) -> str:
-    numbered = "\n".join(f"{i}. {note}" for i, note in enumerate(notes, start=1))
     prompt = (
         f"<brief>\n{brief.model_dump_json(indent=2)}\n</brief>\n\n"
         f"<draft>\n{story}\n</draft>\n\n"
-        f"<revision_notes>\n{numbered}\n</revision_notes>"
+        f"<revision_notes>\n{_numbered(notes)}\n</revision_notes>"
     )
     return call_model(prompt, system=load_prompt("reviser"), effort="medium")
 
 
-def compare(request: str, brief: StoryBrief, story_a: str, story_b: str) -> PairwiseVerdict:
+def compare(
+    request: str, brief: StoryBrief, story_a: str, story_b: str, notes: list[str]
+) -> PairwiseVerdict:
+    # Word counts are computed in code and stated explicitly; an abstract warning
+    # alone did not stop the judge from favoring the longer version.
+    low, high = TARGET_WORDS
+    lengths = (
+        f"Target length: {low} to {high} words.\n"
+        f"Story A: {word_count(story_a)} words.\n"
+        f"Story B: {word_count(story_b)} words."
+    )
     prompt = (
         f"{_review_context(request, brief)}\n\n"
+        f"<lengths>\n{lengths}\n</lengths>\n\n"
+        f"<revision_notes>\n{_numbered(notes)}\n</revision_notes>\n\n"
         f"<story_a>\n{story_a}\n</story_a>\n\n"
         f"<story_b>\n{story_b}\n</story_b>"
     )
-    return call_structured(prompt, PairwiseVerdict, system=load_prompt("pairwise"), effort="high")
+    # Comparing two near-identical drafts needs less deliberation than a full review.
+    return call_structured(prompt, PairwiseVerdict, system=load_prompt("pairwise"), effort="medium")
+
+
+def interpret(story: str, feedback: str) -> FeedbackInterpretation:
+    prompt = (
+        f"<current_story>\n{story}\n</current_story>\n\n"
+        f"<listener_message>\n{feedback}\n</listener_message>"
+    )
+    return call_structured(prompt, FeedbackInterpretation, system=load_prompt("interpreter"), effort="low")

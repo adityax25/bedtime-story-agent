@@ -1,6 +1,6 @@
 """Deterministic checks that code performs better than a model, such as counting."""
 
-TARGET_WORDS = (400, 600)
+TARGET_WORDS = (400, 700)
 # Small overshoots are not worth a revision round.
 TOLERANCE = 0.1
 
@@ -24,3 +24,8 @@ def length_issue(story: str) -> str | None:
             "least essential sentences and scenes, keeping every beat and the refrain."
         )
     return None
+
+
+def exceeds_length_limit(story: str) -> bool:
+    """True when the story is longer than the target plus tolerance."""
+    return word_count(story) > TARGET_WORDS[1] * (1 + TOLERANCE)

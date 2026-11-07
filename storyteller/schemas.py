@@ -88,6 +88,18 @@ class PairwiseVerdict(BaseModel):
     winner: Literal["A", "B", "tie"]
 
 
+class FeedbackInterpretation(BaseModel):
+    """Interpreter output: whether and how a listener's follow-up should change the story."""
+
+    analysis: str = Field(description="Briefly compare the message with the current story before deciding.")
+    kind: Literal["change", "unclear"]
+    safety: SafetyVerdict
+    instruction: str = Field(
+        description="For a change: a specific, safe editing instruction. Empty for unclear or redirect."
+    )
+    reply: str = Field(description="One or two warm, playful sentences to the listener, in the Story Owl's voice.")
+
+
 class StoryPlan(BaseModel):
     """Planner output: the story's structure, written before any prose."""
 

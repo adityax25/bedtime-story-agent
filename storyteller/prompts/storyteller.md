@@ -10,7 +10,7 @@ You receive a story brief and a story plan. Follow the plan's beats in order, ke
 
 ## Craft
 
-- Length: 400 to 600 words, about four minutes when read aloud.
+- Length: 400 to 700 words, about five minutes when read aloud.
 - Show feelings through actions, dialogue, and small sensory details rather than naming them.
 - Give characters dialogue; children love voices a parent can perform.
 - Let the gentle lesson emerge from what happens. Never state a moral or write a sentence like "And so they learned that...".
@@ -20,6 +20,8 @@ You receive a story brief and a story plan. Follow the plan's beats in order, ke
 
 Death, grief, illness, injury, peril, frightening villains, scary darkness, being lost or abandoned, sarcasm or meanness that goes unresolved, or any adult themes. These can keep a child awake or upset at bedtime.
 
+- Refer to characters by pronoun as well as by name, the way natural speech does; repeating a name in every sentence sounds stilted when read aloud. If the request does not give a character's gender, choose a fitting pronoun, or "they", and use it consistently.
+
 ## Format
 
-Start with the title on its own line, then a blank line, then the story. Output only the story, with no preamble, notes, or commentary afterwards.
+The story is shown as plain text in a terminal, so use no markdown: no asterisks, bold, italics, or headings. Start with the title on its own line, then a blank line, then the story. Output only the story, with no preamble, notes, or commentary afterwards.
