@@ -3,7 +3,7 @@
 from unittest.mock import patch
 
 from storyteller import pipeline
-from storyteller.checks import TARGET_WORDS, length_issue, word_count
+from storyteller.checks import TARGET_WORDS, length_issue, reading_grade, word_count
 from storyteller.narration import friendly_message
 from storyteller.prompts import load_prompt
 from storyteller.schemas import (
@@ -76,6 +76,13 @@ class TestLengthCheck:
     def test_flags_short_and_long(self):
         assert "Expand" in length_issue("w " * 100)
         assert "Tighten" in length_issue("w " * 900)
+
+
+class TestReadingGrade:
+    def test_simple_text_scores_lower_than_complex_text(self):
+        simple = "The cat sat. The cat was big. It had a hat."
+        complex_ = "Notwithstanding considerable meteorological uncertainty, the expedition proceeded."
+        assert reading_grade(simple) < reading_grade(complex_)
 
 
 class TestPositionSwappedPairwise:

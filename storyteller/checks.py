@@ -1,5 +1,7 @@
 """Deterministic checks that code performs better than a model, such as counting."""
 
+import re
+
 TARGET_WORDS = (400, 700)
 # Small overshoots are not worth a revision round.
 TOLERANCE = 0.1
@@ -29,3 +31,22 @@ def length_issue(story: str) -> str | None:
 def exceeds_length_limit(story: str) -> bool:
     """True when the story is longer than the target plus tolerance."""
     return word_count(story) > TARGET_WORDS[1] * (1 + TOLERANCE)
+
+
+def _syllables(word: str) -> int:
+    # Vowel-group heuristic; accurate enough to compare texts, not to grade one word.
+    word = word.lower()
+    groups = len(re.findall(r"[aeiouy]+", word))
+    if word.endswith("e") and not word.endswith("le") and groups > 1:
+        groups -= 1
+    return max(groups, 1)
+
+
+def reading_grade(text: str) -> float:
+    """Flesch-Kincaid grade level: an objective reading-difficulty signal beside the judge."""
+    words = re.findall(r"[A-Za-z']+", text)
+    sentences = max(len(re.findall(r"[.!?]+", text)), 1)
+    if not words:
+        return 0.0
+    syllables = sum(_syllables(w) for w in words)
+    return round(0.39 * len(words) / sentences + 11.8 * syllables / len(words) - 15.59, 1)

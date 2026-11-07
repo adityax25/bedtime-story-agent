@@ -99,7 +99,7 @@ class FeedbackOutcome:
     reply: str | None
 
 
-def _evaluate(request: str, brief: StoryBrief, story: str) -> Evaluation:
+def evaluate(request: str, brief: StoryBrief, story: str) -> Evaluation:
     return Evaluation(
         judgement=agents.judge(request, brief, story),
         words=word_count(story),
@@ -141,7 +141,7 @@ def _refine(
     gate, the earlier draft is returned instead.
     """
     on_step("judge", "draft")
-    evaluation = _evaluate(request, brief, story)
+    evaluation = evaluate(request, brief, story)
     on_step("verdict", evaluation.report())
     best_safe = (story, evaluation) if evaluation.safe else None
 
@@ -164,7 +164,7 @@ def _refine(
             # unsafe draft's revision is accepted on the gate judge's re-check
             # rather than on the pairwise judge's separate sense of safety.
             on_step("judge", "safety re-check of the revision")
-            candidate_evaluation = _evaluate(request, brief, candidate)
+            candidate_evaluation = evaluate(request, brief, candidate)
             on_step("verdict", candidate_evaluation.report())
             wins = len(candidate_evaluation.judgement.failed_gates()) < len(evaluation.judgement.failed_gates())
             reasoning = (
@@ -182,7 +182,7 @@ def _refine(
         accepted += 1
         if candidate_evaluation is None:
             on_step("judge", f"revision {accepted}")
-            candidate_evaluation = _evaluate(request, brief, story)
+            candidate_evaluation = evaluate(request, brief, story)
             on_step("verdict", candidate_evaluation.report())
         evaluation = candidate_evaluation
         if evaluation.safe:
